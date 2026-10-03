@@ -9,6 +9,7 @@ import asyncio
 import threading
 from taxonomy import validate_category
 from agy_memory import upsert_fact, upsert_episode, upsert_learning, link_entities
+from evidence_tags import READING_RULE, apply_header, tag_keywords
 from concurrent.futures import ThreadPoolExecutor
 import json
 import logging
@@ -68,7 +69,8 @@ def search_memory(query: str, limit: int = 5) -> str:
         "facts": [],
         "episodes": [],
         "learnings": [],
-        "entity_links": []
+        "entity_links": [],
+        "reading_rule": READING_RULE
     }
 
     # F20: Clamp finite limits (avoid negative limit disabling SQLite bound or huge bounds)
@@ -281,7 +283,8 @@ def search_memory(query: str, limit: int = 5) -> str:
             "facts": facts,
             "episodes": episodes,
             "learnings": learnings,
-            "entity_links": entity_links
+            "entity_links": entity_links,
+            "reading_rule": READING_RULE
         }, ensure_ascii=False, indent=2)
 
 
@@ -293,14 +296,19 @@ def _trigger_bg_drain():
         pass
 
 
-def store_memory(id: str, fact: str, category: str = "general", keywords: str = "") -> str:
+def store_memory(id: str, fact: str, tag: str, category: str = "general", keywords: str = "",
+                 evidence: str = "", as_of: str = "", by: str = "") -> str:
     """Store or update an atomic persistent fact or configuration parameter.
 
     Args:
         id: Unique identifier / key for this memory (e.g. 'infra.server.ip').
         fact: Fact content or description.
+        tag: Evidence tag (see evidence_tags.EVIDENCE_TAGS).
         category: Category classification (normalized to canonical taxonomy).
         keywords: Optional search keywords or synonyms.
+        evidence: Proof; required for executed and verified.
+        as_of: ISO 8601 with offset; defaults to now in UTC+7.
+        by: Agent and model that wrote the entry.
     """
     clean_id = (id or "").strip()
     clean_fact = (fact or "").strip()
@@ -309,8 +317,9 @@ def store_memory(id: str, fact: str, category: str = "general", keywords: str = 
     if not clean_fact:
         raise ValueError("Fact content 'fact' must be a non-empty string.")
 
+    clean_fact = apply_header(clean_fact, tag, evidence, as_of, by)
     norm_category = validate_category(category, CANONICAL_FACT_CATEGORIES)
-    upsert_fact(clean_id, norm_category, clean_fact, (keywords or "").strip())
+    upsert_fact(clean_id, norm_category, clean_fact, tag_keywords((keywords or "").strip(), tag))
     _trigger_bg_drain()
     return f"Successfully stored fact '{clean_id}' (category: {norm_category})"
 
@@ -320,13 +329,19 @@ def record_episode(
     topic: str,
     title: str,
     narrative: str,
+    tag: str,
     period: str = "",
     status: str = "active",
     entities: str = "",
     stance: str = "",
-    keywords: str = ""
+    keywords: str = "",
+    evidence: str = "",
+    as_of: str = "",
+    by: str = ""
 ) -> str:
     """Record or update a narrative chronicle, background story, relationship context, or ongoing topic dossier.
+
+    tag, evidence, as_of and by build the evidence header (see store_memory).
 
     Args:
         id: Unique identifier (e.g. 'home.sent.sanierung', 'health.abbie.epilepsie').
@@ -349,6 +364,7 @@ def record_episode(
     if not clean_narrative:
         raise ValueError("Episode 'narrative' must be a non-empty string.")
 
+    clean_narrative = apply_header(clean_narrative, tag, evidence, as_of, by)
     norm_topic = validate_category(topic, CANONICAL_EPISODE_TOPICS)
     norm_status = (status or "active").strip().lower()
     if norm_status not in CANONICAL_EPISODE_STATUSES:
@@ -363,14 +379,17 @@ def record_episode(
         status=norm_status,
         entities=(entities or "").strip(),
         stance=(stance or "").strip(),
-        keywords=(keywords or "").strip()
+        keywords=tag_keywords((keywords or "").strip(), tag)
     )
     _trigger_bg_drain()
     return f"Successfully recorded episode '{clean_id}' (topic: {norm_topic}, status: {norm_status})"
 
 
-def record_learning(id: str, category: str, insight: str, context: str = "", keywords: str = "") -> str:
+def record_learning(id: str, category: str, insight: str, tag: str, context: str = "", keywords: str = "",
+                    evidence: str = "", as_of: str = "", by: str = "") -> str:
     """Record a practical learning, rule of thumb, heuristic, or tested opinion.
+
+    tag, evidence, as_of and by build the evidence header (see store_memory).
 
     Args:
         id: Unique key (e.g. 'travel.fewo_dog', 'automation.systemd_decouple').
@@ -386,8 +405,9 @@ def record_learning(id: str, category: str, insight: str, context: str = "", key
     if not clean_insight:
         raise ValueError("Learning 'insight' must be a non-empty string.")
 
+    clean_insight = apply_header(clean_insight, tag, evidence, as_of, by)
     norm_category = validate_category(category, CANONICAL_LEARNING_CATEGORIES)
-    upsert_learning(clean_id, norm_category, clean_insight, context or "", keywords or "")
+    upsert_learning(clean_id, norm_category, clean_insight, context or "", tag_keywords(keywords or "", tag))
     _trigger_bg_drain()
     return f"Successfully recorded learning '{clean_id}' (category: {norm_category})"
 
@@ -505,7 +525,8 @@ async def _search_memory_mcp(query: str, limit: int = 5) -> str:
 
 
 @mcp.tool(name="store_memory")
-async def _store_memory_mcp(id: str, fact: str, category: str = "general", keywords: str = "") -> str:
+async def _store_memory_mcp(id: str, fact: str, tag: str, category: str = "general", keywords: str = "",
+                            evidence: str = "", as_of: str = "", by: str = "") -> str:
     """Store or update an atomic persistent fact or configuration parameter.
 
     Args:
@@ -513,9 +534,14 @@ async def _store_memory_mcp(id: str, fact: str, category: str = "general", keywo
         fact: Fact content or description.
         category: Category classification (normalized to canonical taxonomy: infra, hardware, software, contacts, family, health, fitness, finance, insurance, travel, home, media, music, work, dev, preferences, communication, cloud, security, general).
         keywords: Optional search keywords or synonyms.
+        tag: Required evidence tag: executed, verified, decided, client-stated, reported, inferred, assumed, speculated or planned.
+        evidence: Proof (commit SHA, revision, job ID, query, file:line). Required for executed and verified.
+        as_of: When the fact was true, ISO 8601 with offset (e.g. '2026-10-03T21:40+07:00'). Default: now, UTC+7.
+        by: Agent and model writing the entry (e.g. 'claude-opus-5-5').
     """
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, lambda: store_memory(id=id, fact=fact, category=category, keywords=keywords))
+    return await loop.run_in_executor(None, lambda: store_memory(
+        id=id, fact=fact, tag=tag, category=category, keywords=keywords, evidence=evidence, as_of=as_of, by=by))
 
 
 @mcp.tool(name="record_episode")
@@ -524,11 +550,15 @@ async def _record_episode_mcp(
     topic: str,
     title: str,
     narrative: str,
+    tag: str,
     period: str = "",
     status: str = "active",
     entities: str = "",
     stance: str = "",
-    keywords: str = ""
+    keywords: str = "",
+    evidence: str = "",
+    as_of: str = "",
+    by: str = ""
 ) -> str:
     """Record or update a narrative chronicle, background story, relationship context, or ongoing topic dossier.
 
@@ -542,6 +572,10 @@ async def _record_episode_mcp(
         entities: Involved people, organizations, or places.
         stance: User's stance, attitude, sentiments, or approach to this subject.
         keywords: Multilingual search terms and synonyms.
+        tag: Required evidence tag: executed, verified, decided, client-stated, reported, inferred, assumed, speculated or planned.
+        evidence: Proof (commit SHA, revision, job ID, query, file:line). Required for executed and verified.
+        as_of: When the fact was true, ISO 8601 with offset (e.g. '2026-10-03T21:40+07:00'). Default: now, UTC+7.
+        by: Agent and model writing the entry (e.g. 'claude-opus-5-5').
     """
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(
@@ -555,13 +589,18 @@ async def _record_episode_mcp(
             status=status,
             entities=entities,
             stance=stance,
-            keywords=keywords
+            keywords=keywords,
+            tag=tag,
+            evidence=evidence,
+            as_of=as_of,
+            by=by
         )
     )
 
 
 @mcp.tool(name="record_learning")
-async def _record_learning_mcp(id: str, category: str, insight: str, context: str = "", keywords: str = "") -> str:
+async def _record_learning_mcp(id: str, category: str, insight: str, tag: str, context: str = "", keywords: str = "",
+                               evidence: str = "", as_of: str = "", by: str = "") -> str:
     """Record a practical learning, rule of thumb, heuristic, or tested opinion.
 
     Args:
@@ -570,11 +609,16 @@ async def _record_learning_mcp(id: str, category: str, insight: str, context: st
         insight: The lesson learned or heuristic.
         context: Context of how/when this was learned.
         keywords: Search terms and synonyms.
+        tag: Required evidence tag: executed, verified, decided, client-stated, reported, inferred, assumed, speculated or planned.
+        evidence: Proof (commit SHA, revision, job ID, query, file:line). Required for executed and verified.
+        as_of: When the fact was true, ISO 8601 with offset (e.g. '2026-10-03T21:40+07:00'). Default: now, UTC+7.
+        by: Agent and model writing the entry (e.g. 'claude-opus-5-5').
     """
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(
         None,
-        lambda: record_learning(id=id, category=category, insight=insight, context=context, keywords=keywords)
+        lambda: record_learning(id=id, category=category, insight=insight, tag=tag, context=context,
+                                keywords=keywords, evidence=evidence, as_of=as_of, by=by)
     )
 
 

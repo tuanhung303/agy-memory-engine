@@ -899,23 +899,23 @@ class TestMCPServerTools(unittest.TestCase):
         from agy_memory_mcp import store_memory, record_episode, record_learning, link_entities_mcp
 
         # Test store_memory category normalization
-        res_fact = store_memory("fact.test", "Some test fact", category="infrastructure")
+        res_fact = store_memory("fact.test", "Some test fact", tag="assumed", category="infrastructure")
         self.assertIn("category: infra", res_fact)
 
         # Test record_episode status & topic normalization
         with self.assertRaises(ValueError):
-            record_episode("ep.test", "stweg", "Condo meeting", "Discussed roof", status="monitoring")
-        res_ep = record_episode("ep.test", "stweg", "Condo meeting", "Discussed roof", status="active")
+            record_episode("ep.test", "stweg", "Condo meeting", "Discussed roof", tag="assumed", status="monitoring")
+        res_ep = record_episode("ep.test", "stweg", "Condo meeting", "Discussed roof", tag="assumed", status="active")
         self.assertIn("topic: home", res_ep)
         self.assertIn("status: active", res_ep)
 
         # Test record_learning category normalization
-        res_lrn = record_learning("lrn.test", "heuristics", "Check first")
+        res_lrn = record_learning("lrn.test", "heuristics", "Check first", tag="assumed")
         self.assertIn("category: general", res_lrn)
 
         # Test link_entities_mcp mapping & direction inversion (beelink hosts immich -> immich hosted_on beelink)
-        store_memory("infra.beelink", "host", "infra")
-        store_memory("service.immich", "service", "software")
+        store_memory("infra.beelink", "host", tag="assumed", category="infra")
+        store_memory("service.immich", "service", tag="assumed", category="software")
         res_link = link_entities_mcp("infra.beelink", "service.immich", "hosts")
         self.assertIn("'service.immich' --[hosted_on]--> 'infra.beelink'", res_link)
 
@@ -948,8 +948,8 @@ class TestMCPServerTools(unittest.TestCase):
     def test_hybrid_vector_search_end_to_end(self):
         from agy_memory_mcp import store_memory, record_episode, search_memory
         # 1. Store memories with vector embeddings
-        store_memory("infra.ac.midea", "Midea PortaSplit mobile Klimaanlage mit Schallschutzhaube", category="hardware", keywords="klima kühlung leise")
-        record_episode("ep.ac.install", "home", "Klimagerät Montage am Balkon", "Installation der Schalldämmhaube für das Außengerät zur Lärmreduktion.", status="active")
+        store_memory("infra.ac.midea", "Midea PortaSplit mobile Klimaanlage mit Schallschutzhaube", tag="assumed", category="hardware", keywords="klima kühlung leise")
+        record_episode("ep.ac.install", "home", "Klimagerät Montage am Balkon", "Installation der Schalldämmhaube für das Außengerät zur Lärmreduktion.", tag="assumed", status="active")
 
         # 2. Search using vague semantic query that has no direct word overlap
         res_raw = search_memory("Lärmdämmung Außengerät", limit=2)
@@ -990,8 +990,8 @@ class TestMCPServerTools(unittest.TestCase):
 
         # 3. Test reindex_all with batch mode
         from agy_memory_mcp import store_memory
-        store_memory("fact.batch.1", "Sample batch fact 1", category="infra", keywords="batch test")
-        store_memory("fact.batch.2", "Sample batch fact 2", category="infra", keywords="batch test")
+        store_memory("fact.batch.1", "Sample batch fact 1", tag="assumed", category="infra", keywords="batch test")
+        store_memory("fact.batch.2", "Sample batch fact 2", tag="assumed", category="infra", keywords="batch test")
         
         reindex_res = reindex_all(db_path=TEST_DB, verbose=False)
         self.assertEqual(reindex_res.get("status"), "success")

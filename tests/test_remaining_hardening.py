@@ -54,7 +54,7 @@ class RemainingHardeningTests(unittest.TestCase):
         with patch.object(memory.subprocess,'run',return_value=self.response({'facts':[{'id':'server','fact':'new content'}]})):
             memory.sync_turn('Remember this database server configuration', 'saved')
         with schema.db_session() as conn:
-            self.assertEqual(conn.execute('SELECT category,keywords FROM memories').fetchone(), ('infra','postgres sql'))
+            self.assertEqual(conn.execute('SELECT category,keywords FROM memories').fetchone(), ('infra','postgres sql tag:inferred'))
 
     def test_invalid_taxonomy_rejected_without_flattening(self):
         with self.assertRaises(ValueError):

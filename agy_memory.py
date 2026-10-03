@@ -25,6 +25,7 @@ from contextlib import contextmanager, nullcontext, closing
 
 import schema
 from schema import db_session, DB_PATH, PROTECTED_CATEGORIES
+from evidence_tags import apply_header, parse_header, tag_keywords
 from jev_gate import gate_relevant
 from config import (
     MODEL_NAME,
@@ -783,6 +784,39 @@ def _format_diff(old: dict | None, new: dict, label: str) -> str:
         return f"  [UPDATE{protected_marker}] {label}: {new.get('id', '?')}\n" + "\n".join(changes)
     return ""
 
+def _merge_tag(fact_text, keywords, rows):
+    """Evidence header for a consolidated fact (rows: id, category, fact, keywords).
+
+    A valid header in the merged text wins. One shared tag across the sources is
+    kept with the oldest as_of; mixed tags become inferred. All-untagged sources
+    stay untagged, so a merge never invents a tag.
+    """
+    if parse_header(fact_text):
+        return fact_text, tag_keywords(keywords, parse_header(fact_text)["tag"])
+    headers = [parse_header(row[2]) for row in rows]
+    if not any(headers):
+        return fact_text, keywords
+    ids = ", ".join(row[0] for row in rows)
+    tags = {h["tag"] if h else None for h in headers}
+    if len(tags) == 1:
+        tag = tags.pop()
+        as_of = min(h["as_of"] for h in headers)
+        evidence = f"merged from {ids}"
+    else:
+        tag, as_of = "inferred", ""
+        evidence = f"merged from {ids} (mixed tags)"
+    return apply_header(fact_text, tag, evidence, as_of, "memory-consolidate"), tag_keywords(keywords, tag)
+
+
+def _worker_tag(text, keywords, batch_id=None):
+    """Extracted turns are inferred unless the extractor wrote a valid evidence header itself."""
+    parsed = parse_header(text)
+    tag = parsed["tag"] if parsed else "inferred"
+    if not parsed:
+        text = apply_header(text, "inferred", evidence=f"turn extraction {batch_id or 'sync-turn'}", by="memory-worker")
+    return text, tag_keywords(keywords, tag)
+
+
 def sync_turn(user_prompt: str, assistant_response: str, dry_run: bool = False, batch_id: str = None) -> dict:
     """Extract persistent information from a conversation turn and sync to memory.
     
@@ -1030,7 +1064,8 @@ Output ONLY a single valid JSON object (or {{"facts":[], "episodes":[], "learnin
                             continue
                         
                         norm_cat = validate_category(f.get("category", "general"), CANONICAL_FACT_CATEGORIES)
-                        upsert_fact(f["id"], norm_cat, f["fact"], f.get("keywords", ""), connection=transaction)
+                        f["fact"], f["keywords"] = _worker_tag(f["fact"], f.get("keywords", ""), batch_id)
+                        upsert_fact(f["id"], norm_cat, f["fact"], f["keywords"], connection=transaction)
                         applied_changes["facts"].append({
                             "id": f["id"],
                             "category": norm_cat,
@@ -1056,6 +1091,7 @@ Output ONLY a single valid JSON object (or {{"facts":[], "episodes":[], "learnin
                             continue
                         
                         norm_topic = validate_category(ep.get("topic", "general"), CANONICAL_EPISODE_TOPICS)
+                        ep["narrative"], ep["keywords"] = _worker_tag(ep["narrative"], ep.get("keywords", ""), batch_id)
                         upsert_episode(
                             ep["id"],
                             norm_topic,
@@ -1091,6 +1127,7 @@ Output ONLY a single valid JSON object (or {{"facts":[], "episodes":[], "learnin
                             skipped_protected.append(lr["id"])
                             continue
                         norm_lcat = validate_category(lr.get("category", "general"), CANONICAL_LEARNING_CATEGORIES)
+                        lr["insight"], lr["keywords"] = _worker_tag(lr["insight"], lr.get("keywords", ""), batch_id)
                         upsert_learning(
                             lr["id"],
                             norm_lcat,
@@ -1357,6 +1394,7 @@ def consolidate_memories(dry_run: bool = False, proposals: dict = None, snapshot
                 placeholders = ",".join("?" for _ in existing_merged)
                 links = conn.execute(f"SELECT source_id, target_id, relation FROM entity_links WHERE source_id IN ({placeholders}) OR target_id IN ({placeholders})", existing_merged * 2).fetchall()
                 if not dry_run:
+                    fact_text, kws = _merge_tag(fact_text, kws, sources + ([target] if target else []))
                     upsert_fact(target_id, cat_name, fact_text, kws, connection=conn)
                     for src, tgt, relation in links:
                         conn.execute("DELETE FROM entity_links WHERE source_id=? AND target_id=? AND relation=?", (src, tgt, relation))
@@ -1737,6 +1775,10 @@ def main():
     ad.add_argument("--category", type=str, default="general")
     ad.add_argument("--fact", type=str, required=True)
     ad.add_argument("--keywords", type=str, default="")
+    ad.add_argument("--tag", type=str, required=True, help="Evidence tag: executed, verified, decided, client-stated, reported, inferred, assumed, speculated, planned")
+    ad.add_argument("--evidence", type=str, default="", help="Proof; required for executed and verified")
+    ad.add_argument("--as-of", type=str, default="", help="ISO 8601 with offset, e.g. 2026-10-03T21:40+07:00 (default: now, UTC+7)")
+    ad.add_argument("--by", type=str, default="", help="Agent and model writing the entry")
 
     ae = subparsers.add_parser("add-episode", help="Manually add/update a narrative episode")
     ae.add_argument("--id", type=str, required=True)
@@ -1748,6 +1790,10 @@ def main():
     ae.add_argument("--entities", type=str, default="")
     ae.add_argument("--stance", type=str, default="")
     ae.add_argument("--keywords", type=str, default="")
+    ae.add_argument("--tag", type=str, required=True, help="Evidence tag: executed, verified, decided, client-stated, reported, inferred, assumed, speculated, planned")
+    ae.add_argument("--evidence", type=str, default="", help="Proof; required for executed and verified")
+    ae.add_argument("--as-of", type=str, default="", help="ISO 8601 with offset, e.g. 2026-10-03T21:40+07:00 (default: now, UTC+7)")
+    ae.add_argument("--by", type=str, default="", help="Agent and model writing the entry")
 
     al = subparsers.add_parser("add-learning", help="Manually add/update an experiential learning")
     al.add_argument("--id", type=str, required=True)
@@ -1755,6 +1801,10 @@ def main():
     al.add_argument("--insight", type=str, required=True)
     al.add_argument("--context", type=str, default="")
     al.add_argument("--keywords", type=str, default="")
+    al.add_argument("--tag", type=str, required=True, help="Evidence tag: executed, verified, decided, client-stated, reported, inferred, assumed, speculated, planned")
+    al.add_argument("--evidence", type=str, default="", help="Proof; required for executed and verified")
+    al.add_argument("--as-of", type=str, default="", help="ISO 8601 with offset, e.g. 2026-10-03T21:40+07:00 (default: now, UTC+7)")
+    al.add_argument("--by", type=str, default="", help="Agent and model writing the entry")
 
     # Entity link CLI commands
     lk = subparsers.add_parser("link", help="Create a relationship link between two entities / memory IDs")
@@ -1823,13 +1873,16 @@ def main():
     elif args.command == "sync-turn":
         sync_turn(args.user, args.assistant, dry_run=args.dry_run)
     elif args.command == "add":
-        upsert_fact(args.id, args.category, args.fact, args.keywords)
+        fact = apply_header(args.fact, args.tag, args.evidence, args.as_of, args.by)
+        upsert_fact(args.id, args.category, fact, tag_keywords(args.keywords, args.tag))
         print(f"Added fact {args.id}")
     elif args.command == "add-episode":
-        upsert_episode(args.id, args.topic, args.title, args.narrative, args.period, args.status, args.entities, args.stance, args.keywords)
+        narrative = apply_header(args.narrative, args.tag, args.evidence, args.as_of, args.by)
+        upsert_episode(args.id, args.topic, args.title, narrative, args.period, args.status, args.entities, args.stance, tag_keywords(args.keywords, args.tag))
         print(f"Added episode {args.id}")
     elif args.command == "add-learning":
-        upsert_learning(args.id, args.category, args.insight, args.context, args.keywords)
+        insight = apply_header(args.insight, args.tag, args.evidence, args.as_of, args.by)
+        upsert_learning(args.id, args.category, insight, args.context, tag_keywords(args.keywords, args.tag))
         print(f"Added learning {args.id}")
     elif args.command == "link":
         link_entities(args.source, args.target, args.relation)

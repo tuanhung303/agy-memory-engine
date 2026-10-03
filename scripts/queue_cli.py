@@ -34,6 +34,7 @@ from agy_memory import (
     CANONICAL_EPISODE_TOPICS,
 )
 from taxonomy import validate_category
+from evidence_tags import apply_header, parse_header, tag_keywords
 from scripts.migrate_v2_to_v2_1 import map_relation, CANONICAL_EPISODE_STATUSES
 
 
@@ -210,6 +211,15 @@ def _validate_payload(data):
     return validated_facts, validated_episodes, validated_learnings, validated_links
 
 
+
+def _nightly_tag(text, keywords, batch_id):
+    """Extracted turns are inferred unless the extractor wrote a valid evidence header itself."""
+    parsed = parse_header(text)
+    tag = parsed["tag"] if parsed else "inferred"
+    if not parsed:
+        text = apply_header(text, "inferred", evidence=f"queue batch {batch_id}", by="memory-nightly")
+    return text, tag_keywords(keywords, tag)
+
 def cmd_commit(args):
     db_path = args.db_path or QUEUE_DB_PATH
     m_db_path = getattr(args, "memory_db", None) or get_config("AGY_MEMORY_DB", None)
@@ -305,10 +315,13 @@ def cmd_commit(args):
             with db_session(db_path=m_db_path) as m_conn, m_conn:
                 m_conn.execute("BEGIN IMMEDIATE")
                 for fid, cat, content, kw in facts:
+                    content, kw = _nightly_tag(content, kw, args.batch_id)
                     upsert_fact(fid, cat, content, kw, connection=m_conn)
                 for epid, topic, title, narrative, period, status, entities, stance, kw in episodes:
+                    narrative, kw = _nightly_tag(narrative, kw, args.batch_id)
                     upsert_episode(epid, topic, title, narrative, period, status, entities, stance, kw, connection=m_conn)
                 for lrid, cat, insight, context, kw in learnings:
+                    insight, kw = _nightly_tag(insight, kw, args.batch_id)
                     upsert_learning(lrid, cat, insight, context, kw, connection=m_conn)
                 for src, tgt, rel in links:
                     link_entities(src, tgt, rel, connection=m_conn)

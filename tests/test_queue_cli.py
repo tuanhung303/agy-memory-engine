@@ -94,7 +94,8 @@ class TestQueueCLI(unittest.TestCase):
         with sqlite3.connect(self.memory_db) as conn:
             row = conn.execute("SELECT fact FROM memories WHERE id = 'infra.server.ip'").fetchone()
             self.assertIsNotNone(row)
-            self.assertEqual(row[0], "Server IP is 192.168.1.50")
+            self.assertTrue(row[0].startswith("[inferred | "))
+            self.assertTrue(row[0].endswith("\nServer IP is 192.168.1.50"))
 
     def test_cli_commit_lease_fencing(self):
         enqueue_turn("User: Secret?", "Yes", source="antigravity", chat_id="chat-fence", db_path=self.queue_db)

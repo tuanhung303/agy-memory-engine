@@ -103,8 +103,8 @@ class TestMcpSurfaceHardening(unittest.TestCase):
 
     def test_search_memory_clamped_limits(self):
         """F20: Limit parameter is clamped to finite positive bounds."""
-        store_memory("fact.test1", "Alpha fact content", category="infra")
-        store_memory("fact.test2", "Beta fact content", category="infra")
+        store_memory("fact.test1", "Alpha fact content", tag="assumed", category="infra")
+        store_memory("fact.test2", "Beta fact content", tag="assumed", category="infra")
 
         # Negative limit does not disable SQLite limit or cause syntax error
         res_neg = json.loads(search_memory("fact", limit=-1))
@@ -122,35 +122,35 @@ class TestMcpSurfaceHardening(unittest.TestCase):
     def test_store_memory_validates_identifiers_and_content(self):
         """F20: store_memory raises ValueError on blank/whitespace id or content."""
         with self.assertRaises(ValueError):
-            store_memory("", "Valid content")
+            store_memory("", "Valid content", tag="assumed")
 
         with self.assertRaises(ValueError):
-            store_memory("   ", "Valid content")
+            store_memory("   ", "Valid content", tag="assumed")
 
         with self.assertRaises(ValueError):
-            store_memory("valid.id", "")
+            store_memory("valid.id", "", tag="assumed")
 
         with self.assertRaises(ValueError):
-            store_memory("valid.id", "   ")
+            store_memory("valid.id", "   ", tag="assumed")
 
     def test_record_episode_validates_fields(self):
         """F20: record_episode raises ValueError on blank id, title, or narrative."""
         with self.assertRaises(ValueError):
-            record_episode("", "home", "Title", "Narrative")
+            record_episode("", "home", "Title", "Narrative", tag="assumed")
 
         with self.assertRaises(ValueError):
-            record_episode("ep.1", "home", "", "Narrative")
+            record_episode("ep.1", "home", "", "Narrative", tag="assumed")
 
         with self.assertRaises(ValueError):
-            record_episode("ep.1", "home", "Title", "")
+            record_episode("ep.1", "home", "Title", "", tag="assumed")
 
     def test_record_learning_validates_fields(self):
         """F20: record_learning raises ValueError on blank id or insight."""
         with self.assertRaises(ValueError):
-            record_learning("", "workflow", "Valid insight")
+            record_learning("", "workflow", "Valid insight", tag="assumed")
 
         with self.assertRaises(ValueError):
-            record_learning("lrn.1", "workflow", "")
+            record_learning("lrn.1", "workflow", "", tag="assumed")
 
     def test_link_entities_validates_fields(self):
         """F20: link_entities_mcp raises ValueError on blank source, target, or relation."""

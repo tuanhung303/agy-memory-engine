@@ -142,10 +142,10 @@ You can seed your agent's memory directly from the terminal:
 
 ```bash
 # 1. Add an atomic fact (Layer 1)
-python3 agy_memory.py add --id "infra.server.ip" --category "infra" --fact "Home server IP is 192.168.1.100" --keywords "home server ip host"
+python3 agy_memory.py add --id "infra.server.ip" --category "infra" --fact "Home server IP is 192.168.1.100" --keywords "home server ip host" --tag verified --evidence "ip addr show" --by "claude-opus-5-5"
 
 # 2. Add a personal learning / heuristic (Layer 3)
-python3 agy_memory.py add-learning --id "workflow.email.style" --category "communication" --insight "Keep email replies strictly under 3 bullet points." --keywords "email communication reply rule"
+python3 agy_memory.py add-learning --id "workflow.email.style" --category "communication" --insight "Keep email replies strictly under 3 bullet points." --keywords "email communication reply rule" --tag decided --evidence "user rule" --by "claude-opus-5-5"
 
 # 3. Test sub-millisecond prefetch (< 2ms)
 python3 agy_memory.py prefetch "server"
@@ -222,12 +222,22 @@ The engine includes a native FastMCP server (`agy_memory_mcp.py`) that equips au
 
 ### Available MCP Tools
 
+Every write (`store_memory`, `record_episode`, `record_learning`, and the CLI
+`add`, `add-episode`, `add-learning`) needs an evidence `tag`: executed,
+verified, decided, client-stated, reported, inferred, assumed, speculated or
+planned. `executed` and `verified` also need `evidence`. Optional `as_of`
+(ISO 8601 with offset, default now in UTC+7) and `by` (agent and model). The
+server stores them as a header line, `[tag | as_of | by | evidence: ...]`, in
+front of the text, adds `tag:<tag>` to the keywords, and rejects a write
+that breaks the format. Nightly queue commits are tagged `inferred` unless
+the payload text already starts with a valid header. Code: `evidence_tags.py`.
+
 | Tool | Description | Key Parameters |
 | :--- | :--- | :--- |
 | `search_memory` | Hybrid multilingual search across Facts, Episodes, Learnings & Graph relations | `query` *(str)*, `limit` *(int, default: 5)* |
-| `store_memory` | Store or update an atomic configuration parameter or fact (Layer 1) | `id`, `fact`, `category`, `keywords` |
-| `record_episode` | Record a rich narrative chronicle, ongoing topic, or history (Layer 2) | `id`, `topic`, `title`, `narrative`, `status`, `stance` |
-| `record_learning` | Record a practical heuristic, tested rule of thumb, or stance (Layer 3) | `id`, `category`, `insight`, `context`, `keywords` |
+| `store_memory` | Store or update an atomic configuration parameter or fact (Layer 1) | `id`, `fact`, `tag`, `category`, `keywords`, `evidence`, `as_of`, `by` |
+| `record_episode` | Record a rich narrative chronicle, ongoing topic, or history (Layer 2) | `id`, `topic`, `title`, `narrative`, `tag`, `status`, `stance`, `evidence`, `as_of`, `by` |
+| `record_learning` | Record a practical heuristic, tested rule of thumb, or stance (Layer 3) | `id`, `category`, `insight`, `tag`, `context`, `keywords`, `evidence`, `as_of`, `by` |
 | `link_entities_mcp` | Create directional knowledge graph links between memory entities (Layer 4) | `source_id`, `target_id`, `relation` |
 | `list_memories` | Full multi-layer inventory export of all stored memories | — |
 | `migrate_memory` | Migrate database to canonical v2.1 taxonomies, map relations, prune orphans | `dry_run` *(bool, default: True)* |
