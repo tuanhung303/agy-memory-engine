@@ -534,7 +534,7 @@ async def _store_memory_mcp(id: str, fact: str, tag: str, category: str = "gener
         fact: Fact content or description.
         category: Category classification (normalized to canonical taxonomy: infra, hardware, software, contacts, family, health, fitness, finance, insurance, travel, home, media, music, work, dev, preferences, communication, cloud, security, general).
         keywords: Optional search keywords or synonyms.
-        tag: Required evidence tag: executed, verified, decided, client-stated, reported, inferred, assumed, speculated or planned.
+        tag: Required evidence tag: executed, verified, decided, client-stated, inferred, assumed, speculated or planned.
         evidence: Proof (commit SHA, revision, job ID, query, file:line). Required for executed and verified.
         as_of: When the fact was true, ISO 8601 with offset (e.g. '2026-10-03T21:40+07:00'). Default: now, UTC+7.
         by: Agent and model writing the entry (e.g. 'claude-opus-5-5').
@@ -572,7 +572,7 @@ async def _record_episode_mcp(
         entities: Involved people, organizations, or places.
         stance: User's stance, attitude, sentiments, or approach to this subject.
         keywords: Multilingual search terms and synonyms.
-        tag: Required evidence tag: executed, verified, decided, client-stated, reported, inferred, assumed, speculated or planned.
+        tag: Required evidence tag: executed, verified, decided, client-stated, inferred, assumed, speculated or planned.
         evidence: Proof (commit SHA, revision, job ID, query, file:line). Required for executed and verified.
         as_of: When the fact was true, ISO 8601 with offset (e.g. '2026-10-03T21:40+07:00'). Default: now, UTC+7.
         by: Agent and model writing the entry (e.g. 'claude-opus-5-5').
@@ -609,7 +609,7 @@ async def _record_learning_mcp(id: str, category: str, insight: str, tag: str, c
         insight: The lesson learned or heuristic.
         context: Context of how/when this was learned.
         keywords: Search terms and synonyms.
-        tag: Required evidence tag: executed, verified, decided, client-stated, reported, inferred, assumed, speculated or planned.
+        tag: Required evidence tag: executed, verified, decided, client-stated, inferred, assumed, speculated or planned.
         evidence: Proof (commit SHA, revision, job ID, query, file:line). Required for executed and verified.
         as_of: When the fact was true, ISO 8601 with offset (e.g. '2026-10-03T21:40+07:00'). Default: now, UTC+7.
         by: Agent and model writing the entry (e.g. 'claude-opus-5-5').

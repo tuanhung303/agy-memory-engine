@@ -22,7 +22,7 @@ class EvidenceHeaderTests(unittest.TestCase):
         self.assertEqual(parse_header(header)["tag"], "verified")
 
     def test_rejects_missing_or_unknown_tag(self):
-        for tag in ("", "true", "checking"):
+        for tag in ("", "true", "checking", "reported"):
             with self.assertRaises(EvidenceTagError):
                 build_header(tag)
 
@@ -42,7 +42,7 @@ class EvidenceHeaderTests(unittest.TestCase):
         self.assertRegex(build_header("planned"), r"^\[planned \| \d{4}-\d{2}-\d{2}T\d{2}:\d{2}\+07:00 \| by unspecified\]$")
 
     def test_restore_replaces_old_header(self):
-        first = apply_header("GR prod rev is 00156", "reported", by="luna")
+        first = apply_header("GR prod rev is 00156", "speculated", by="luna")
         second = apply_header(first, "verified", "gcloud describe", "2026-10-03T21:40+07:00", "claude")
         self.assertEqual(second.count("\n"), 1)
         self.assertEqual(strip_header(second), "GR prod rev is 00156")

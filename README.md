@@ -224,7 +224,7 @@ The engine includes a native FastMCP server (`agy_memory_mcp.py`) that equips au
 
 Every write (`store_memory`, `record_episode`, `record_learning`, and the CLI
 `add`, `add-episode`, `add-learning`) needs an evidence `tag`: executed,
-verified, decided, client-stated, reported, inferred, assumed, speculated or
+verified, decided, client-stated, inferred, assumed, speculated or
 planned. `executed` and `verified` also need `evidence`. Optional `as_of`
 (ISO 8601 with offset, default now in UTC+7) and `by` (agent and model). The
 server stores them as a header line, `[tag | as_of | by | evidence: ...]`, in

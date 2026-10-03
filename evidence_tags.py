@@ -17,7 +17,6 @@ EVIDENCE_TAGS = (
     "verified",
     "decided",
     "client-stated",
-    "reported",
     "inferred",
     "assumed",
     "speculated",
@@ -42,7 +41,7 @@ READING_RULE = (
     "Each entry starts with [tag | as_of | by | evidence]. decided binds until superseded. "
     "executed and verified are true as of as_of; re-check one older than 7 days before a "
     "production or shared-state action. client-stated is the client's claim, not our finding. "
-    "reported, inferred, speculated, planned and untagged entries are leads: verify before acting."
+    "inferred, speculated, planned and untagged entries are leads: verify before acting."
 )
 
 
