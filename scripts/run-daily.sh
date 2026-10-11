@@ -4,7 +4,8 @@
 # For each finished local day that still holds pending turns, oldest first, it starts
 # fresh `claude -p` sessions that follow task.md for that day, until the day is empty
 # or a session makes no progress. Today's turns wait for tomorrow's run.
-# Usage: run-daily.sh [--through YYYY-MM-DD] [--max-days N]
+# Usage: run-daily.sh [--through YYYY-MM-DD] [--max-days N] [--only YYYY-MM-DD]
+# --only runs one day (today included) under its own lock, so a backlog can drain in parallel.
 set -u
 ENGINE=/Users/__blitzzz/Documents/GitHub/agy-memory-engine
 CLAUDE_BIN=${CLAUDE_BIN:-/Users/__blitzzz/.local/bin/claude}
@@ -12,10 +13,13 @@ MODEL=${AGY_DAILY_MODEL:-claude-haiku-5-5}
 MAX_SESSIONS_PER_DAY=${AGY_DAILY_MAX_SESSIONS:-12}
 THROUGH=$(date -v-1d +%F)
 MAX_DAYS=99
+ONLY=""
+ARGS=("$@")   # kept for the re-run under the lock; the loop below shifts them away
 while [ $# -gt 0 ]; do
   case "$1" in
     --through) THROUGH=$2; shift 2 ;;
     --max-days) MAX_DAYS=$2; shift 2 ;;
+    --only) ONLY=$2; THROUGH=$2; shift 2 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -29,7 +33,7 @@ LOG_DIR="$ENGINE/tmp/daily"
 mkdir -p "$LOG_DIR"
 # Kernel lock: lockf holds it while the child runs, and the OS frees it if either dies.
 if [ -z "${AGY_DAILY_LOCKED:-}" ]; then
-  AGY_DAILY_LOCKED=1 /usr/bin/lockf -t 0 "$LOG_DIR/.lockfile" /bin/bash "$0" "$@"
+  AGY_DAILY_LOCKED=1 /usr/bin/lockf -t 0 "$LOG_DIR/.lockfile${ONLY:+-$ONLY}" /bin/bash "$0" "${ARGS[@]}"
   rc=$?
   if [ "$rc" -eq 75 ]; then
     echo "$(date '+%F %T') another run holds the lock; exiting" >> "$LOG_DIR/runner.log"
@@ -51,6 +55,7 @@ done_days=0
 status=0
 for day in $days; do
   [[ "$day" > "$THROUGH" ]] && continue
+  [ -n "$ONLY" ] && [ "$day" != "$ONLY" ] && continue
   [ "$done_days" -ge "$MAX_DAYS" ] && break
   done_days=$((done_days + 1))
   for i in $(seq 1 "$MAX_SESSIONS_PER_DAY"); do
