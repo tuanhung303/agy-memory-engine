@@ -3,7 +3,9 @@
 `scripts/run-daily.sh` runs this file once a day, driven by Claude Haiku
 (`claude-haiku-5-5`) through the Claude Code CLI (`claude -p`). The launchd
 agent `com.blitzzz.memory-daily` starts it at 07:00 local (Asia/Bangkok,
-+07:00), or at wake if the Mac was asleep. Kai chose Haiku on our own Claude
++07:00), or at wake if the Mac was asleep. Its plist is kept in
+`scripts/com.blitzzz.memory-daily.plist`; it launches through osascript
+because macOS privacy controls deny launchd's own bash access to ~/Documents. Kai chose Haiku on our own Claude
 plan and dropped the Hermes cron job on 2026-10-11.
 
 The runner reconciles one local calendar day at a time, oldest first, and

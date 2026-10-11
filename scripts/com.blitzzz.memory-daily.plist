@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.blitzzz.memory-daily</string>
+  <!-- osascript is the responsible process, as in ai.hermes.gateway: launchd's own bash is denied ~/Documents by macOS privacy controls. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/osascript</string>
+    <string>-l</string>
+    <string>JavaScript</string>
+    <string>-e</string>
+    <string>ObjC.import("stdlib"); const status=$.system("exec /bin/bash /Users/__blitzzz/Documents/GitHub/agy-memory-engine/scripts/run-daily.sh >> /Users/__blitzzz/.gemini/logs/memory-daily.out.log 2>> /Users/__blitzzz/.gemini/logs/memory-daily.err.log"); const signal=status &amp; 127; $.exit(status === -1 ? 1 : signal === 0 ? (status &gt;&gt; 8) &amp; 255 : 128 + signal);</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict><key>HOME</key><string>/Users/__blitzzz</string></dict>
+  <key>StartCalendarInterval</key>
+  <dict><key>Hour</key><integer>7</integer><key>Minute</key><integer>0</integer></dict>
+  <key>StandardOutPath</key><string>/Users/__blitzzz/.gemini/logs/memory-daily.launchd.log</string>
+  <key>StandardErrorPath</key><string>/Users/__blitzzz/.gemini/logs/memory-daily.launchd.log</string>
+  <key>RunAtLoad</key><false/>
+</dict>
+</plist>
