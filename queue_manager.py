@@ -351,11 +351,13 @@ def claim_batch(
     retry_delay_seconds: int = 60,
     prefer_fresh: bool = False,
     exclude_batch_ids: list[str] | set[str] | None = None,
-    db_path: str = QUEUE_DB_PATH
+    db_path: str = QUEUE_DB_PATH,
+    day: str | None = None,
 ) -> BatchClaim | None:
     """Atomically claim a batch of turns partitioned strictly by (source, chat_id).
 
     Supports interleaving fresh turns and retry claims, and skipping specified batch IDs.
+    With ``day`` (YYYY-MM-DD, local time), only turns created on that local day are claimed.
     """
     ensure_queue_db(db_path)
     with _get_connection(db_path, timeout=10.0, isolation_level=None) as conn:
@@ -367,9 +369,12 @@ def claim_batch(
             def _try_claim_retries():
                 exclude_sql = ""
                 params = [retry_delay_seconds]
+                if day:
+                    exclude_sql += " AND date(created_at, 'localtime') = ?"
+                    params.append(day)
                 if exclude_batch_ids:
                     ph = ",".join("?" for _ in exclude_batch_ids)
-                    exclude_sql = f"AND batch_id NOT IN ({ph})"
+                    exclude_sql += f" AND batch_id NOT IN ({ph})"
                     params.extend(list(exclude_batch_ids))
 
                 cursor.execute(f"""
@@ -442,9 +447,10 @@ def claim_batch(
                     FROM turn_queue
                     WHERE status = 'pending' AND batch_id IS NULL
                       AND (error IS NULL OR processed_at IS NULL OR datetime(processed_at) <= datetime('now', '-' || ? || ' seconds'))
+                      AND (? IS NULL OR date(created_at, 'localtime') = ?)
                     ORDER BY CASE WHEN error IS NULL THEN 0 ELSE 1 END, processed_at ASC, id ASC
                     LIMIT 1;
-                """, (retry_delay_seconds,))
+                """, (retry_delay_seconds, day, day))
                 target_row = cursor.fetchone()
                 if not target_row:
                     return None
@@ -458,9 +464,10 @@ def claim_batch(
                       AND source IS ?
                       AND chat_id IS ?
                       AND (error IS NULL OR processed_at IS NULL OR datetime(processed_at) <= datetime('now', '-' || ? || ' seconds'))
+                      AND (? IS NULL OR date(created_at, 'localtime') = ?)
                     ORDER BY id ASC
                     LIMIT ?;
-                """, (target_source, target_chat_id, retry_delay_seconds, batch_size))
+                """, (target_source, target_chat_id, retry_delay_seconds, day, day, batch_size))
                 rows = cursor.fetchall()
                 if not rows:
                     return None
@@ -531,6 +538,20 @@ def claim_batch(
         except Exception:
             conn.execute("ROLLBACK")
             raise
+
+
+def pending_days(db_path: str = QUEUE_DB_PATH) -> list[dict]:
+    """Local calendar days that still hold pending or claimed turns, oldest first."""
+    ensure_queue_db(db_path)
+    with _get_connection(db_path, timeout=10.0) as conn:
+        rows = conn.execute("""
+            SELECT date(created_at, 'localtime') AS day, count(*)
+            FROM turn_queue
+            WHERE status IN ('pending', 'claimed')
+            GROUP BY day
+            ORDER BY day ASC;
+        """).fetchall()
+    return [{"day": r[0], "pending": r[1]} for r in rows]
 
 
 def acknowledge_batch(

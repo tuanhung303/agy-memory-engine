@@ -17,6 +17,7 @@ from queue_manager import (
     release_batch,
     prune_processed_turns,
     requeue_failed_turns,
+    pending_days,
     QUEUE_DB_PATH,
     _get_connection,
 )
@@ -61,6 +62,7 @@ def cmd_claim(args):
         retry_delay_seconds=60,
         prefer_fresh=True,
         db_path=db_path,
+        day=getattr(args, "day", None),
     )
     if not claim:
         print("null")
@@ -364,6 +366,12 @@ def cmd_commit(args):
     return 0 if ok else 1
 
 
+def cmd_days(args):
+    db_path = args.db_path or QUEUE_DB_PATH
+    print(json.dumps(pending_days(db_path=db_path), ensure_ascii=False))
+    return 0
+
+
 def cmd_requeue(args):
     db_path = args.db_path or QUEUE_DB_PATH
     count = requeue_failed_turns(dry_run=args.dry_run, db_path=db_path)
@@ -390,7 +398,11 @@ def main():
     claim_p = subparsers.add_parser("claim", help="Claim a batch of pending turns")
     claim_p.add_argument("--batch-size", type=int, default=CLAIM_BATCH_SIZE, help="Batch size")
     claim_p.add_argument("--lease-seconds", type=int, default=300, help="Lease duration in seconds")
+    claim_p.add_argument("--day", default=None, help="Only claim turns created on this local day (YYYY-MM-DD)")
     claim_p.set_defaults(func=cmd_claim)
+
+    days_p = subparsers.add_parser("days", help="List local days that still hold pending turns, oldest first")
+    days_p.set_defaults(func=cmd_days)
 
     ack_p = subparsers.add_parser("ack", help="Acknowledge a processed batch")
     ack_p.add_argument("--batch-id", required=True, help="Batch ID")

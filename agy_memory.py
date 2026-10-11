@@ -1583,10 +1583,7 @@ def optimize_db(apply_changes: bool = False, age_decay: bool = True, consolidate
 
     snapshot = create_snapshot(tag="optimization", db_path=target_db)
     logger.info("[BACKUP] Snapshot created: %s", snapshot["filename"])
-    archive = archive_path(target_db)
-    backups = sorted(archive.glob("memory_db_backup_*_optimization.bak"), key=lambda p: p.stat().st_mtime, reverse=True)
-    for old in backups[20:]:
-        old.unlink()
+    prune_snapshots("optimization", keep=20, db_path=target_db)
     if age_decay:
         age_episodes()
     if consolidate:
@@ -1697,6 +1694,17 @@ def _verify_snapshot(conn):
     for table, columns in FTS_COLUMNS.items():
         conn.execute(f"SELECT {columns} FROM {table} LIMIT 0")
         conn.execute(f"SELECT {columns} FROM {table}_fts LIMIT 0")
+
+
+def prune_snapshots(tag: str, keep: int = 20, db_path: str = None) -> int:
+    """Keep the newest ``keep`` snapshots with this tag; delete older ones. Returns the count deleted."""
+    if not re.fullmatch(r"[a-zA-Z0-9_-]+", tag):
+        raise ValueError("Invalid snapshot tag")
+    archive = archive_path(db_path or schema.DB_PATH)
+    backups = sorted(archive.glob(f"memory_db_backup_*_{tag}.bak"), key=lambda p: p.stat().st_mtime, reverse=True)
+    for old in backups[keep:]:
+        old.unlink()
+    return len(backups[keep:])
 
 
 def create_snapshot(tag: str = "manual", db_path: str = None) -> dict:
@@ -1907,6 +1915,7 @@ def main():
             apply_flag = args.apply and not args.dry_run
             if apply_flag:
                 create_snapshot(tag="consolidate")
+                prune_snapshots("consolidate", keep=20)
             merges = consolidate_memories(dry_run=not apply_flag, proposals=proposals, snapshot=snapshot)
             print(json.dumps({"applied": apply_flag, "merges": merges}, ensure_ascii=False, indent=2))
         else:

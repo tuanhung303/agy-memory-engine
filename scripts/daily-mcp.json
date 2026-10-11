@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "memory": {
+      "type": "stdio",
+      "command": "/Users/__blitzzz/Documents/GitHub/agy-memory-engine/.venv/bin/python",
+      "args": ["/Users/__blitzzz/Documents/GitHub/agy-memory-engine/agy_memory_mcp.py"],
+      "env": {"AGY_MEMORY_DB": "/Users/__blitzzz/.gemini/memory.db"}
+    }
+  }
+}
