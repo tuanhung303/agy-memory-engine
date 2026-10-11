@@ -84,6 +84,9 @@ for day in $days; do
       break
     fi
   done
+  # Queue commits do not embed new rows; drain the vector index jobs so search sees this day.
+  vec=$(.venv/bin/python scripts/vector_index_cli.py run --batch-size 100 --max-batches 50 2>&1 | tr -d '\n ')
+  log "day=$day vector_index $vec"
 done
 log "end status=$status"
 exit $status
