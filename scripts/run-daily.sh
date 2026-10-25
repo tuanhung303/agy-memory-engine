@@ -33,7 +33,7 @@ LOG_DIR="$ENGINE/tmp/daily"
 mkdir -p "$LOG_DIR"
 # Kernel lock: lockf holds it while the child runs, and the OS frees it if either dies.
 if [ -z "${AGY_DAILY_LOCKED:-}" ]; then
-  AGY_DAILY_LOCKED=1 /usr/bin/lockf -t 0 "$LOG_DIR/.lockfile${ONLY:+-$ONLY}" /bin/bash "$0" "${ARGS[@]}"
+  AGY_DAILY_LOCKED=1 /usr/bin/lockf -t 0 "$LOG_DIR/.lockfile${ONLY:+-$ONLY}" /bin/bash "$0" ${ARGS[@]+"${ARGS[@]}"}
   rc=$?
   if [ "$rc" -eq 75 ]; then
     echo "$(date '+%F %T') another run holds the lock; exiting" >> "$LOG_DIR/runner.log"
